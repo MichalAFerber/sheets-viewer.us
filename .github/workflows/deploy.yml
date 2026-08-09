@@ -1,0 +1,60 @@
+name: Deploy to Cloudflare Pages
+
+# Direct-upload deploy model, matching wizard-web's: this workflow is the single
+# deploy path for this site, and Cloudflare's Git integration is turned off for
+# the project (§4 — exactly one deploy path).
+#
+#   push to main   → production deployment
+#   pull_request   → preview deployment (branch alias)
+#
+# Without a CLOUDFLARE_API_TOKEN secret the deploy step skips green rather than
+# failing. That is deliberate: this file can land before the secret exists, and
+# can never race a still-enabled Git integration.
+#
+# A runner only ever has committed content, so --commit-dirty=false is honest
+# here in a way hand-run `wrangler pages deploy` was not.
+#
+# Secrets:
+#   CLOUDFLARE_API_TOKEN   Cloudflare Pages:Edit on the TechGuyWithABeard account
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check for the deploy credential
+        id: gate
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "No CLOUDFLARE_API_TOKEN — skipping deploy (see the header)."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        if: steps.gate.outputs.ok == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || '8a0d49b1f3fdcdadec135562ec8a4fdc' }}
+        run: >
+          npx wrangler@4 pages deploy .
+          --project-name sheets-web-viewer
+          --branch ${{ github.ref == 'refs/heads/main' && 'main' || github.head_ref }}
+          --commit-dirty=false
