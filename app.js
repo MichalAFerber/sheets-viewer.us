@@ -32,7 +32,7 @@
   var MAX_CHILDREN  = 1000;      // cap rendered siblings per tree node
   var MAX_ROWS      = 5000;      // cap rendered table rows
 
-  var rawText = "", currentName = "", renderKind = "", parsed = null, parseErr = "";
+  var rawText = "", currentName = "", _renderKind = "", _parsed = null, parseErr = "";
   var hasRendered = false;       // does this file have a rendered plane?
   var mode = "source";           // "rendered" | "source"
   var codeBuiltFor = null, dataBuilt = false;
@@ -42,14 +42,14 @@
   // Accepted data types (this viewer only).
   var ACCEPT_EXT = { xlsx:1, xlsm:1, xlsb:1, xls:1, xlt:1, xltx:1, xltm:1, xlam:1, ods:1, fods:1, dif:1, prn:1, dbf:1, numbers:1, xlml:1, wk1:1, wk3:1, wks:1, "123":1, et:1, uos:1 };
   // highlight.js language per extension.
-  var EXT_LANG = {
+  var _EXT_LANG = {
     json:"json", jsonc:"json", json5:"json", jsonld:"json", ndjson:"json",
     yaml:"yaml", yml:"yaml", toml:"ini",
     csv:"plaintext", tsv:"plaintext",
     xml:"xml", rss:"xml", atom:"xml", graphql:"graphql", gql:"graphql"
   };
   // How each type is rendered: "tree" | "table" | "xml" | "" (source-only).
-  var RENDER_KIND = {
+  var _RENDER_KIND = {
     json:"tree", jsonc:"tree", json5:"tree", jsonld:"tree", ndjson:"tree",
     yaml:"tree", yml:"tree",
     csv:"table", tsv:"table",
@@ -78,7 +78,7 @@
   function stripJsonc(t){ // remove // and /* */ comments (string-aware)
     return t.replace(/("(?:\\.|[^"\\])*")|\/\/[^\n\r]*|\/\*[\s\S]*?\*\//g, function(m, str){ return str ? str : ""; });
   }
-  function parseFor(ext, text){
+  function _parseFor(ext, text){
     if (ext === "json" || ext === "jsonld") return JSON.parse(text);
     if (ext === "jsonc") return JSON.parse(stripJsonc(text));
     if (ext === "json5") return JSON5.parse(text);
@@ -93,7 +93,7 @@
     }
     throw new Error("no parser");
   }
-  function parseCsv(text, sep){
+  function _parseCsv(text, sep){
     var rows = [], row = [], cur = "", q = false, i = 0, c, n = text.length;
     while (i < n){
       c = text[i];
@@ -179,12 +179,12 @@
     }
     return li;
   }
-  function renderTree(value){
+  function _renderTree(value){
     var ul = el("ul", "tree");
     ul.appendChild(treeNode(null, value, 0));
     dataView.innerHTML = ""; dataView.appendChild(ul);
   }
-  function renderTable(rows){
+  function _renderTable(rows){
     dataView.innerHTML = "";
     if (!rows.length){ dataView.textContent = "(empty)"; return; }
     var wrap = el("div"); wrap.style.width = "100%";
@@ -253,7 +253,7 @@
     }
     return li;
   }
-  function renderXml(text){
+  function _renderXml(text){
     var d = new DOMParser().parseFromString(text, "application/xml");
     var perr = d.getElementsByTagName("parsererror");
     if (perr && perr.length) throw new Error("XML parse error");
@@ -307,12 +307,10 @@
   // ---------- Source plane ----------
   function doFormat(text, ext){
     var kind = FORMAT_KIND[ext];
-    try {
       if (kind === "json")  return JSON.stringify(JSON.parse(extOf(currentName)==="jsonc"?stripJsonc(text):text), null, 2);
       if (kind === "ndjson") return text.split(/\r?\n/).filter(function(l){return l.trim();}).map(function(l){ return JSON.stringify(JSON.parse(l), null, 2); }).join("\n");
       if (kind === "yaml")  return jsyaml.dump(jsyaml.load(text), { indent: 2, lineWidth: 120 });
       if (kind === "xml")   return prettyXml(text);
-    } catch (e){ throw e; }
     return text;
   }
   function prettyXml(text){
@@ -357,7 +355,7 @@
   function buildCode(){
     var key = "sheet" + activeSheet;
     if (codeBuiltFor === key) return;
-    var text = "";
+    var text;
     try { text = XLSX.utils.sheet_to_csv(activeWS(), { blankrows: false }).replace(/\n$/, ""); } catch (e){ text = ""; }
     var lang = "plaintext";
     var htmlOut, usedLang = "";
@@ -415,8 +413,8 @@
     activeSheet = i; dataBuilt = false; codeBuiltFor = null;
     if (mode === "rendered") buildRendered(); else buildCode();
   }
-  function looksStructured(text){
-    var t = String(text||"").replace(/^﻿/,"").replace(/^\s+/,"").charAt(0);
+  function _looksStructured(text){
+    var t = String(text||"").replace(/^\uFEFF/,"").replace(/^\s+/,"").charAt(0);
     return t === "{" || t === "[";
   }
   function setMode(m){
@@ -445,7 +443,7 @@
     btnView.setAttribute("aria-label", toCode ? "View source" : "View rendered data");
   }
   function clearAll(){
-    rawText = ""; currentName = ""; renderKind = ""; parsed = null; parseErr = "";
+    rawText = ""; currentName = ""; _renderKind = ""; _parsed = null; parseErr = "";
     syncQueryName("");
     dataBuilt = false; codeBuiltFor = null; beautified = false; beautifyCache = null; hasRendered = false;
     dataView.hidden = true; dataView.innerHTML = "";
